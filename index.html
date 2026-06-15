@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#1e1e2f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>궁극의 입자 유니버스</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Noto Sans KR', 'sans-serif'] },
+                    colors: {
+                        darkbg: '#1e1e2f', panelbg: '#2a2a40', brand: '#6366f1',
+                        cation: '#ef4444', anion: '#0ea5e9', electron: '#facc15'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root { --safe-top: env(safe-area-inset-top, 0px); --safe-bottom: env(safe-area-inset-bottom, 0px); }
+        body { background-color: #1e1e2f; color: #ffffff; overflow: hidden; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+        .h-screen-safe { height: 100dvh; height: calc(var(--vh, 1vh) * 100); }
+        .scrollable-panel { overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 3px; }
+        
+        .glass-panel { background: rgba(42, 42, 64, 0.7); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        canvas.sim-canvas { touch-action: none; width: 100%; height: 100%; display: block; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-5px); } }
+        .animate-shake { animation: shake 0.3s ease-in-out; }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        .animate-float { animation: float 3s ease-in-out infinite; }
+        @keyframes pop { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        .animate-pop { animation: pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+<script type="text/babel">
+// --- 1. System Setup & Utils ---
+const setVH = () => document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
+window.addEventListener('resize', setVH); setVH();
+
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyDlvKmtic4ThNkgGyM4ho5u7Svc3YAYhMqXCZ-uVRm_h1npsUkYX6IUQKlTnCdiCU/exec"; 
+
+// 10문제 풀 모두 복구 완료
+const QUIZ_POOL = [
+    { q: "수소(H)와 산소(O) 원자로 만들어진 물(H₂O)과 과산화수소(H₂O₂)는 같은 분자이다.", a: false, explain: "결합하는 원자의 수와 구조가 다르면 완전히 다른 분자가 됩니다." },
+    { q: "나트륨(Na) 원자는 전자를 1개 잃고 양이온(Na⁺)이 되기 쉽다.", a: true, explain: "나트륨은 가장 바깥 껍질의 전자 1개를 잃고 안정해지며 양이온이 됩니다." },
+    { q: "산소(O) 원자는 전자를 2개 얻고 음이온(O²⁻)이 되기 쉽다.", a: true, explain: "산소는 가장 바깥 껍질에 전자를 2개 채워 안정해지며 음이온이 됩니다." },
+    { q: "아르곤(Ar)은 전자 껍질이 꽉 차 있어서 다른 원자와 결합하지 않고 혼자 존재한다.", a: true, explain: "18족 원소인 아르곤은 매우 안정적이어서 원자 하나가 독립적으로 떠다닙니다." },
+    { q: "소금(NaCl)은 물 분자처럼 독립된 '분자' 덩어리로 존재한다.", a: false, explain: "소금은 수많은 Na⁺와 Cl⁻ 이온이 연속적으로 결합한 형태이므로, 독립된 분자가 아닙니다." },
+    { q: "이온이 들어있는 수용액에 전압을 걸어주면 양이온은 (+)극으로 이동한다.", a: false, explain: "양이온은 (+)전하를 띠므로 반대 전하인 (-)극으로 끌려갑니다." },
+    { q: "원자가 전자를 잃으면 (+)전하량이 (-)전하량보다 커져 양이온이 된다.", a: true, explain: "전자(-)를 잃으면 원자핵의 (+)전하가 상대적으로 커지므로 양이온이 됩니다." },
+    { q: "이온의 이름에서 양이온은 원소 이름 뒤에 '화 이온'을 붙인다.", a: false, explain: "양이온은 원소 이름 뒤에 그냥 '이온'을 붙이고, 음이온(단원자)에 주로 '화 이온'을 붙입니다." },
+    { q: "황산 이온(SO₄²⁻)처럼 여러 원자가 모여 하나의 이온처럼 행동하는 것을 다원자 이온이라고 한다.", a: true, explain: "여러 원자가 결합하여 전하를 띠는 무리를 다원자 이온이라고 합니다." },
+    { q: "공기 중에는 이온이 둥둥 떠다니고, 바닷물 속에는 분자만 존재한다.", a: false, explain: "반대입니다! 공기 중에는 원자와 분자가, 바닷물 속에는 전하를 띤 이온들이 주로 존재합니다." }
+];
+const shuffle = (a) => [...a].sort(() => Math.random() - 0.5);
+
+// 프로필 모드 연속 4개 미션 복구 완료
+const PROFILE_MISSIONS = [
+    { id: 'Na', atom: 'Na', desc: '나트륨 원자가 전자 1개를 잃음', correctFormula: '+', blocks: ['나트륨', '이온', '화 이온', '소'], targetAssembly: ['나트륨', '이온'], targetTrash: [] },
+    { id: 'O', atom: 'O', desc: '산소 원자가 전자 2개를 얻음', correctFormula: '2-', blocks: ['산', '소', '이온', '화 이온'], targetAssembly: ['산', '화 이온'], targetTrash: ['소'] },
+    { id: 'Cl', atom: 'Cl', desc: '염소 원자가 전자 1개를 얻음', correctFormula: '-', blocks: ['염', '소', '이온', '화 이온'], targetAssembly: ['염', '화 이온'], targetTrash: ['소'] },
+    { id: 'Mg', atom: 'Mg', desc: '마그네슘 원자가 전자 2개를 잃음', correctFormula: '2+', blocks: ['마그네슘', '이온', '화 이온', '산'], targetAssembly: ['마그네슘', '이온'], targetTrash: [] }
+];
+
+// --- 2. Vanilla JS Physics Engines ---
+class ObserverEngine {
+    constructor(canvas, scene) {
+        this.canvas = canvas; this.ctx = canvas.getContext('2d', { alpha: false });
+        this.scene = scene; this.dpr = window.devicePixelRatio || 1;
+        this.particles = []; this.initParticles();
+    }
+    resize(rect) {
+        this.width = rect.width; this.height = rect.height;
+        this.canvas.width = this.width * this.dpr; this.canvas.height = this.height * this.dpr;
+        this.ctx.scale(this.dpr, this.dpr);
+    }
+    initParticles() {
+        this.particles = [];
+        if(this.scene === 'air') {
+            for(let i=0; i<12; i++) this.particles.push({ type: 'N2', x: Math.random()*300, y: Math.random()*300, vx: (Math.random()-.5)*1, vy: (Math.random()-.5)*1, angle: Math.random()*Math.PI*2, va: (Math.random()-.5)*0.05 });
+            for(let i=0; i<4; i++) this.particles.push({ type: 'O2', x: Math.random()*300, y: Math.random()*300, vx: (Math.random()-.5)*1, vy: (Math.random()-.5)*1, angle: Math.random()*Math.PI*2, va: (Math.random()-.5)*0.05 });
+            for(let i=0; i<2; i++) this.particles.push({ type: 'Ar', x: Math.random()*300, y: Math.random()*300, vx: (Math.random()-.5)*1.5, vy: (Math.random()-.5)*1.5, angle: 0, va: 0 });
+        } else {
+            for(let i=0; i<6; i++) this.particles.push({ type: 'Na+', x: Math.random()*300, y: Math.random()*300, vx: (Math.random()-.5)*0.8, vy: (Math.random()-.5)*0.8, angle: 0, va: 0 });
+            for(let i=0; i<6; i++) this.particles.push({ type: 'Cl-', x: Math.random()*300, y: Math.random()*300, vx: (Math.random()-.5)*0.8, vy: (Math.random()-.5)*0.8, angle: 0, va: 0 });
+            for(let i=0; i<3; i++) this.particles.push({ type: 'Mg2+', x: Math.random()*300, y: Math.random()*300, vx: (Math.random()-.5)*0.6, vy: (Math.random()-.5)*0.6, angle: 0, va: 0 });
+            for(let i=0; i<3; i++) this.particles.push({ type: 'SO42-', x: Math.random()*300, y: Math.random()*300, vx: (Math.random()-.5)*0.5, vy: (Math.random()-.5)*0.5, angle: Math.random()*Math.PI*2, va: (Math.random()-.5)*0.02 });
+            for(let i=0; i<2; i++) this.particles.push({ type: 'Ca2+', x: Math.random()*300, y: Math.random()*300, vx: (Math.random()-.5)*0.6, vy: (Math.random()-.5)*0.6, angle: 0, va: 0 });
+            for(let i=0; i<2; i++) this.particles.push({ type: 'K+', x: Math.random()*300, y: Math.random()*300, vx: (Math.random()-.5)*0.8, vy: (Math.random()-.5)*0.8, angle: 0, va: 0 });
+        }
+    }
+    start() { this.isRunning = true; const loop = () => { if(!this.isRunning) return; this.update(); this.draw(); this.animId = requestAnimationFrame(loop); }; loop(); }
+    stop() { this.isRunning = false; cancelAnimationFrame(this.animId); }
+    update() {
+        this.particles.forEach(p => {
+            p.x += p.vx; p.y += p.vy; p.angle += p.va;
+            if(p.x < 20 || p.x > this.width - 20) p.vx *= -1;
+            if(p.y < 20 || p.y > this.height - 20) p.vy *= -1;
+            p.x = Math.max(20, Math.min(this.width-20, p.x)); p.y = Math.max(20, Math.min(this.height-20, p.y));
+        });
+    }
+    draw() {
+        const ctx = this.ctx; ctx.fillStyle = this.scene === 'air' ? '#1e1e2f' : '#0f172a'; ctx.fillRect(0, 0, this.width, this.height);
+        if(this.scene === 'ocean') {
+            ctx.fillStyle = 'rgba(255,255,255,0.05)';
+            for(let i=0; i<5; i++) { ctx.beginPath(); ctx.arc(Math.abs(Math.sin(Date.now()*.001+i)*this.width), (Date.now()*.05 + i*50)%this.height, i*2+2, 0, Math.PI*2); ctx.fill(); }
+        }
+        const drawCircle = (x,y,r,c,t, fs='10px') => { ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fillStyle=c; ctx.fill(); ctx.shadowBlur=10; ctx.shadowColor=c; ctx.fill(); ctx.shadowBlur=0; ctx.fillStyle='#fff'; ctx.font=`bold ${fs} sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(t,x,y+1); };
+
+        this.particles.forEach(p => {
+            if(p.type === 'N2' || p.type === 'O2') {
+                const c = p.type === 'N2' ? '#3b82f6' : '#ef4444'; const r=10; const d=12;
+                const x1 = p.x + Math.cos(p.angle)*d, y1 = p.y + Math.sin(p.angle)*d; const x2 = p.x - Math.cos(p.angle)*d, y2 = p.y - Math.sin(p.angle)*d;
+                ctx.strokeStyle = c; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+                drawCircle(x1,y1,r,c, p.type.charAt(0)); drawCircle(x2,y2,r,c, p.type.charAt(0));
+            } else if (p.type === 'Ar') { drawCircle(p.x, p.y, 14, '#a855f7', 'Ar');
+            } else if (p.type === 'Na+') { drawCircle(p.x, p.y, 12, '#6366f1', 'Na⁺');
+            } else if (p.type === 'Cl-') { drawCircle(p.x, p.y, 14, '#f43f5e', 'Cl⁻');
+            } else if (p.type === 'Mg2+') { drawCircle(p.x, p.y, 11, '#10b981', 'Mg²⁺', '9px');
+            } else if (p.type === 'Ca2+') { drawCircle(p.x, p.y, 13, '#b08ad4', 'Ca²⁺', '9px');
+            } else if (p.type === 'K+') { drawCircle(p.x, p.y, 13, '#e8a87c', 'K⁺', '10px');
+            } else if (p.type === 'SO42-') {
+                ctx.beginPath(); ctx.arc(p.x, p.y, 16, 0, Math.PI*2); ctx.fillStyle='#d4a03e'; ctx.fill(); ctx.shadowBlur=10; ctx.shadowColor='#d4a03e'; ctx.fill(); ctx.shadowBlur=0;
+                ctx.fillStyle='#fff'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('SO₄²⁻',p.x,p.y+1);
+            }
+        });
+    }
+}
+
+class WalletAtomEngine {
+    constructor(canvas, element, mode, onActionCallback) {
+        this.canvas = canvas; this.ctx = canvas.getContext('2d', { alpha: false });
+        this.element = element; this.mode = mode; this.onActionCallback = onActionCallback; 
+        this.dpr = window.devicePixelRatio || 1; this.electrons = []; this.currentChange = 0;
+        this.initModel(); this.bindEvents();
+    }
+    // 치명적 버그 수정: 누락되었던 resize 메소드 완벽 복구
+    resize(rect) {
+        this.width = rect.width; this.height = rect.height;
+        this.canvas.width = this.width * this.dpr; this.canvas.height = this.height * this.dpr;
+        this.ctx.scale(this.dpr, this.dpr);
+        this.cx = this.width / 2; this.cy = this.height / 2;
+        this.scale = Math.min(this.width, this.height) / 350; if(this.scale < 0.5) this.scale = 0.5;
+    }
+    reset(newElement) { if(newElement) this.element = newElement; this.initModel(); }
+    initModel() {
+        this.electrons = []; this.currentChange = 0;
+        this.targetChange = this.element === 'Na' ? 1 : this.element === 'Mg' ? 2 : this.element === 'O' ? 2 : 1;
+        const config = { 'Na': { shells: [2, 8, 1], color: '#3b82f6' }, 'Mg': { shells: [2, 8, 2], color: '#10b981' }, 'O': { shells: [2, 6], color: '#ef4444' }, 'Cl': { shells: [2, 8, 7], color: '#f59e0b' } }[this.element] || { shells: [2, 8], color: '#aaaaaa' };
+        this.color = config.color;
+        config.shells.forEach((count, sIdx) => {
+            const isOuter = sIdx === config.shells.length - 1;
+            for (let i=0; i<count; i++) this.electrons.push({ shell: sIdx, radius: 40 + sIdx*40, angle: (Math.PI*2/Math.max(1, count))*i, speed: 0.02-(sIdx*0.005), isOuter: isOuter, visible: true });
+        });
+    }
+    bindEvents() {
+        const handleClick = (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            const isTouch = e.type.startsWith('touch');
+            // 터치, 마우스 이벤트 충돌 방지 및 안전한 좌표 추출
+            const px = (isTouch ? e.touches[0].clientX : e.clientX) - rect.left;
+            const py = (isTouch ? e.touches[0].clientY : e.clientY) - rect.top;
+            const mx = (px - this.cx) / this.scale, my = (py - this.cy) / this.scale;
+
+            if (this.mode === 'extract' && this.currentChange < this.targetChange) {
+                for(let el of this.electrons) {
+                    if(el.isOuter && el.visible) {
+                        const ex = Math.cos(el.angle) * el.radius, ey = Math.sin(el.angle) * el.radius;
+                        if(Math.hypot(mx-ex, my-ey) < 25) { el.visible = false; this.currentChange++; this.onActionCallback('extracted', this.currentChange >= this.targetChange); break; }
+                    }
+                }
+            } else if (this.mode === 'inject' && this.currentChange < this.targetChange) {
+                this.onActionCallback('request_inject', (canInject) => {
+                    if(canInject) {
+                        this.currentChange++; const outerRadius = 40 + (this.element === 'O' ? 1 : 2) * 40;
+                        this.electrons.push({ shell: 99, radius: outerRadius, angle: Math.random()*Math.PI*2, speed: 0.015, isOuter: true, visible: true, newAdded: true });
+                        if(this.currentChange >= this.targetChange) this.onActionCallback('completed', true);
+                    }
+                });
+            }
+        };
+        this.canvas.addEventListener('mousedown', handleClick);
+        this.canvas.addEventListener('touchstart', (e)=>{e.preventDefault(); handleClick(e);}, {passive: false});
+        this.cleanup = () => { this.canvas.removeEventListener('mousedown', handleClick); this.canvas.removeEventListener('touchstart', handleClick); };
+    }
+    start() { this.isRunning = true; let last = performance.now(); const loop = (t) => { if(!this.isRunning) return; const dt = t - last; last = t; this.update(dt); this.draw(); this.animId = requestAnimationFrame(loop); }; loop(last); }
+    stop() { this.isRunning = false; cancelAnimationFrame(this.animId); if(this.cleanup) this.cleanup(); }
+    update(dt) { this.electrons.forEach(el => { el.angle += el.speed * (dt/16); }); }
+    draw() {
+        const { ctx, width, height, cx, cy, scale, element } = this;
+        ctx.fillStyle = '#1e1e2f'; ctx.fillRect(0, 0, width, height); ctx.save(); ctx.translate(cx, cy); ctx.scale(scale, scale);
+        ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+        const maxShell = element === 'O' ? 1 : 2;
+        for(let i=0; i<=maxShell; i++) { ctx.beginPath(); ctx.arc(0, 0, 40+i*40, 0, Math.PI*2); ctx.stroke(); }
+        if(this.mode === 'inject' && this.currentChange < this.targetChange) { ctx.beginPath(); ctx.arc(0, 0, 40+maxShell*40, 0, Math.PI*2); ctx.strokeStyle = 'rgba(250, 204, 21, 0.5)'; ctx.setLineDash([5,5]); ctx.lineWidth=3; ctx.stroke(); ctx.setLineDash([]); }
+        ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI*2); ctx.fillStyle = this.color; ctx.fill(); ctx.shadowBlur = 15; ctx.shadowColor = this.color; ctx.fill(); ctx.shadowBlur = 0;
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        let displaySym = element;
+        if(this.currentChange >= this.targetChange) { if(element === 'Na') displaySym = 'Na⁺'; else if(element === 'Mg') displaySym = 'Mg²⁺'; else if(element === 'O') displaySym = 'O²⁻'; else if(element === 'Cl') displaySym = 'Cl⁻'; }
+        ctx.fillText(displaySym, 0, 0);
+        this.electrons.forEach(el => {
+            if(!el.visible) return;
+            const ex = Math.cos(el.angle) * el.radius, ey = Math.sin(el.angle) * el.radius;
+            ctx.beginPath(); ctx.arc(ex, ey, 5, 0, Math.PI * 2); ctx.fillStyle = el.newAdded ? '#67e8f9' : '#facc15'; ctx.fill();
+            if (el.isOuter && this.mode === 'extract' && this.currentChange < this.targetChange) { ctx.shadowBlur = 10; ctx.shadowColor = '#facc15'; ctx.fill(); ctx.shadowBlur = 0; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); } 
+            else { ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1; ctx.stroke(); }
+            ctx.fillStyle = '#000'; ctx.fillRect(ex - 2, ey - 0.5, 4, 1);
+        });
+        ctx.restore();
+    }
+}
+
+class MigrationEngine {
+    constructor(canvas) {
+        this.canvas = canvas; this.ctx = canvas.getContext('2d', { alpha: false }); this.dpr = window.devicePixelRatio || 1;
+        this.powerOn = false; this.polarity = 1; this.particles = []; this.initParticles();
+    }
+    resize(rect) { this.width = rect.width; this.height = rect.height; this.canvas.width = this.width * this.dpr; this.canvas.height = this.height * this.dpr; this.ctx.scale(this.dpr, this.dpr); }
+    initParticles() { this.particles = []; for(let i=0; i<100; i++) { this.particles.push({ type: 'Cu', charge: 2, x: 0.5 + (Math.random()-0.5)*0.2, y: 0.2 + Math.random()*0.6, vx: 0, vy: 0 }); this.particles.push({ type: 'MnO4', charge: -1, x: 0.5 + (Math.random()-0.5)*0.2, y: 0.2 + Math.random()*0.6, vx: 0, vy: 0 }); } }
+    setPower(isOn) { this.powerOn = isOn; }
+    togglePolarity() { this.polarity *= -1; }
+    start() { this.isRunning = true; let lastTime = performance.now(); const loop = (time) => { if (!this.isRunning) return; const dt = time - lastTime; lastTime = time; this.update(dt); this.draw(); this.animationId = requestAnimationFrame(loop); }; this.animationId = requestAnimationFrame(loop); }
+    stop() { this.isRunning = false; if (this.animationId) cancelAnimationFrame(this.animationId); }
+    update(dt) {
+        const timeScale = dt / 16; const Ex = this.powerOn ? 0.0002 * this.polarity : 0; const friction = 0.95; const diffusion = 0.002;
+        this.particles.forEach(p => { p.vx += (Math.random() - 0.5) * diffusion; p.vy += (Math.random() - 0.5) * diffusion; p.vx += p.charge * Ex * timeScale; p.vx *= friction; p.vy *= friction; p.x += p.vx * timeScale; p.y += p.vy * timeScale; if (p.x < 0.15) { p.x = 0.15; p.vx *= -0.5; } if (p.x > 0.85) { p.x = 0.85; p.vx *= -0.5; } if (p.y < 0.15) { p.y = 0.15; p.vy *= -0.5; } if (p.y > 0.85) { p.y = 0.85; p.vy *= -0.5; } });
+    }
+    draw() {
+        const { ctx, width, height } = this; ctx.fillStyle = '#1e1e2f'; ctx.fillRect(0, 0, width, height);
+        const padX = width * 0.15; const padY = height * 0.15; const liqW = width - padX * 2; const liqH = height - padY * 2;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.05)'; ctx.fillRect(padX, padY, liqW, liqH); ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; ctx.lineWidth = 2; ctx.strokeRect(padX, padY, liqW, liqH);
+        const drawElectrode = (isLeft) => { const isPositive = isLeft ? this.polarity === 1 : this.polarity === -1; const x = isLeft ? padX - 20 : width - padX; const y = padY + 20; const h = liqH - 40; const w = 20; ctx.fillStyle = isPositive ? '#ef4444' : '#10b981'; if(!this.powerOn) ctx.fillStyle = '#6b7280'; ctx.fillRect(x, y, w, h); ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Noto Sans KR'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(isPositive ? '+' : '-', x + w/2, y + h/2); if(this.powerOn) { ctx.shadowColor = isPositive ? '#ef4444' : '#10b981'; ctx.shadowBlur = 15; ctx.fillRect(x, y, w, h); ctx.shadowBlur = 0; } };
+        drawElectrode(true); drawElectrode(false);
+        ctx.globalCompositeOperation = 'screen';
+        const cuParts = this.particles.filter(p => p.type === 'Cu'); const mnParts = this.particles.filter(p => p.type === 'MnO4');
+        const drawGroup = (parts, color, r) => { ctx.fillStyle = color; ctx.beginPath(); parts.forEach(p => { ctx.moveTo(p.x * width + r, p.y * height); ctx.arc(p.x * width, p.y * height, r, 0, Math.PI * 2); }); ctx.fill(); };
+        ctx.globalAlpha = 0.3; drawGroup(cuParts, '#3b82f6', 15); drawGroup(mnParts, '#a855f7', 15);
+        ctx.globalAlpha = 1.0; ctx.globalCompositeOperation = 'source-over'; drawGroup(cuParts, '#60a5fa', 3); drawGroup(mnParts, '#c084fc', 3);
+        ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.font = '14px Noto Sans KR'; ctx.textAlign = 'center'; ctx.fillText('Cu²⁺ (파란색)', width/2, height * 0.1); ctx.fillText('MnO₄⁻ (보라색)', width/2, height * 0.9);
+    }
+}
+
+// --- 3. React Components ---
+const { useState, useEffect, useRef } = React;
+
+const Modal = ({ isOpen, onClose, title, children }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-panelbg border border-white/10 rounded-2xl p-6 w-full max-w-md max-h-[90dvh] overflow-y-auto animate-fade-in shadow-2xl">
+                <h2 className="text-xl font-bold mb-4 text-brand">{title}</h2>
+                <div className="text-gray-200">{children}</div>
+                <div className="mt-6 flex justify-end"><button onClick={onClose} className="px-5 py-2 bg-brand hover:bg-indigo-600 rounded-lg font-medium active:scale-95">확인</button></div>
+            </div>
+        </div>
+    );
+};
+
+const PasswordModal = ({ isOpen, onClose, onSuccess, targetName }) => {
+    const [pwd, setPwd] = useState('');
+    const [error, setErr] = useState(false);
+    if (!isOpen) return null;
+    
+    const checkPwd = () => {
+        if (pwd === '2222') { setPwd(''); setErr(false); onSuccess(); } 
+        else { setErr(true); setTimeout(() => setErr(false), 500); setPwd(''); }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="bg-panelbg border border-white/20 rounded-3xl p-6 w-full max-w-xs animate-fade-in shadow-2xl text-center">
+                <h2 className="text-2xl font-black mb-2 text-white">🔒 암호 입력</h2>
+                <p className="text-sm text-gray-400 mb-6">[{targetName}]에 입장하기 위한<br/>선생님의 암호를 입력하세요.</p>
+                <div className={`text-3xl font-mono tracking-[0.5em] h-12 bg-black/40 rounded-xl flex items-center justify-center mb-6 border ${error ? 'border-red-500 animate-shake text-red-500' : 'border-white/10 text-brand'}`}>
+                    {pwd.padEnd(4, '·')}
+                </div>
+                <div className="grid grid-cols-3 gap-2 mb-6">
+                    {[1,2,3,4,5,6,7,8,9].map(n => (
+                        <button key={n} onClick={()=>setPwd(p=>(p.length<4?p+n:p))} className="py-3 bg-white/5 hover:bg-white/10 rounded-xl text-xl font-bold active:scale-95 transition-transform">{n}</button>
+                    ))}
+                    <button onClick={()=>setPwd('')} className="py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl text-sm font-bold active:scale-95">지우기</button>
+                    <button onClick={()=>setPwd(p=>(p.length<4?p+'0':p))} className="py-3 bg-white/5 hover:bg-white/10 rounded-xl text-xl font-bold active:scale-95">0</button>
+                    <button onClick={checkPwd} className="py-3 bg-brand hover:bg-indigo-500 rounded-xl text-sm font-bold active:scale-95">확인</button>
+                </div>
+                <button onClick={onClose} className="text-gray-500 text-sm hover:text-white transition-colors">돌아가기</button>
+            </div>
+        </div>
+    );
+};
+
+const AdminGuideModal = ({ isOpen, onClose }) => {
+    const [copied, setCopied] = useState(false);
+    const scriptCode = `function doPost(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['시간', '학번', '이름', '학습단원', '퀴즈점수', '알게된점']);
+    sheet.getRange(1, 1, 1, sheet.getLastColumn()).setFontWeight('bold').setBackground('#4a86e8').setFontColor('#ffffff');
+  }
+  var data = JSON.parse(e.postData.contents);
+  sheet.appendRow([data.timestamp, data.studentId, data.studentName, data.sessionName, data.quizScore, data.insight]);
+  return ContentService.createTextOutput(JSON.stringify({ result: 'success' })).setMimeType(ContentService.MimeType.JSON);
+}`;
+    const handleCopy = () => {
+        const t = document.createElement("textarea"); t.value = scriptCode; document.body.appendChild(t); t.select();
+        try { document.execCommand('copy'); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch (err) {} document.body.removeChild(t);
+    };
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="bg-panelbg border border-white/20 rounded-2xl w-full max-w-2xl max-h-[90dvh] flex flex-col animate-fade-in shadow-2xl">
+                <div className="p-5 border-b border-white/10 flex justify-between items-center"><h2 className="text-xl font-bold text-white">⚙️ DB 연동 가이드</h2><button onClick={onClose} className="text-gray-400 hover:text-white">✕</button></div>
+                <div className="p-5 overflow-y-auto space-y-4 text-sm text-gray-300">
+                    <div className="p-4 bg-black/30 rounded-lg"><p className="font-bold text-white mb-2">1. 구글 스프레드시트 준비</p><p>새 시트를 생성합니다. 헤더는 자동 생성됩니다.</p></div>
+                    <div className="p-4 bg-black/30 rounded-lg">
+                        <div className="flex justify-between items-center mb-2"><p className="font-bold text-white">2. Apps Script 코드 입력</p><button onClick={handleCopy} className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-xs">{copied ? '✅ 복사됨' : '📋 코드 복사'}</button></div>
+                        <pre className="bg-[#1e1e2f] p-3 rounded overflow-x-auto text-xs text-green-400 border border-white/5">{scriptCode}</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ObserveMode = () => {
+    const canvasRef = useRef(null); const engineRef = useRef(null); const [scene, setScene] = useState('air');
+    useEffect(() => {
+        const cv = canvasRef.current; if(!cv) return;
+        const engine = new ObserverEngine(cv, scene); engineRef.current = engine;
+        engine.resize(cv.getBoundingClientRect()); engine.start();
+        const obs = new ResizeObserver(entries => { for(let e of entries) engine.resize(e.contentRect); }); obs.observe(cv);
+        return () => { obs.disconnect(); engine.stop(); };
+    }, [scene]);
+
+    return (
+        <div className="flex-1 flex flex-col w-full h-full relative">
+            <div className="absolute top-4 w-full flex justify-center z-10 gap-2 px-4 pointer-events-none">
+                <div className="pointer-events-auto bg-black/50 backdrop-blur rounded-xl p-1 flex border border-white/10 shadow-lg">
+                    <button onClick={() => setScene('air')} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${scene === 'air' ? 'bg-sky-500 text-white' : 'text-gray-400'}`}>🌤️ 공기 (원자/분자)</button>
+                    <button onClick={() => setScene('ocean')} className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${scene === 'ocean' ? 'bg-indigo-500 text-white' : 'text-gray-400'}`}>🏖️ 바닷물 (이온)</button>
+                </div>
+            </div>
+            <div className="flex-1 relative min-h-[280px]"><canvas ref={canvasRef} className="sim-canvas bg-darkbg"></canvas></div>
+            <div className="absolute bottom-4 left-4 right-4 flex justify-center pointer-events-none">
+                <div className="pointer-events-auto glass-panel p-3 rounded-xl max-w-sm w-full text-center text-sm shadow-xl flex flex-col gap-2">
+                    {scene === 'air' ? (
+                        <><p>공기 중에는 <b>분자</b>(N₂, O₂)와 <b>단일 원자</b>(Ar)가 독립적으로 떠다닙니다.</p>
+                        <div className="flex justify-center gap-2 text-xs opacity-80"><span className="text-blue-400">N₂ 78%</span><span className="text-red-400">O₂ 21%</span><span className="text-purple-400">Ar 0.9%</span></div></>
+                    ) : (
+                        <><p>바닷물 속에는 다양한 전하를 띠는 <b>이온</b>이 녹아 있습니다.</p>
+                        <div className="flex flex-wrap justify-center gap-2 text-xs opacity-80"><span className="text-rose-400">Cl⁻ 55%</span><span className="text-indigo-400">Na⁺ 31%</span><span className="text-yellow-500">SO₄²⁻ 8%</span><span className="text-emerald-400">Mg²⁺ 4%</span><span className="text-purple-300">Ca²⁺ 1%</span><span className="text-orange-300">K⁺ 1%</span></div></>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const SkewerMode = ({ setCompleted }) => {
+    const [slots, setSlots] = useState([null, null, null]);
+    const [selectedA, setSelectedA] = useState(null);
+    const [result, setResult] = useState(null);
+    const atoms = { H: { c: 'bg-sky-400', n: '수소' }, O: { c: 'bg-red-400', n: '산소' }, C: { c: 'bg-gray-500', n: '탄소' } };
+    
+    const handleSlotClick = (i) => {
+        if(!selectedA && slots[i]) { const ns = [...slots]; ns[i] = null; setSlots(ns); setResult(null); return; }
+        if(!selectedA) return;
+        const ns = [...slots]; ns[i] = selectedA; setSlots(ns); setResult(null);
+    };
+    
+    const checkMolecule = () => {
+        const seq = slots.map(s => s ? s : '').join('');
+        if(seq === 'HOH') { setResult({ o: '💧', t: '물 (H₂O)', d: '수소-산소-수소 순서로 결합!' }); setCompleted(true); }
+        else if(seq === 'OCO') { setResult({ o: '🌫️', t: '이산화탄소 (CO₂)', d: '산소-탄소-산소 순서로 결합!' }); setCompleted(true); }
+        else if(seq === 'HH') { setResult({ o: '💥', t: '수소 분자 (H₂)', d: '수소 원자 2개 결합! 우주에서 가장 가벼운 기체' }); setCompleted(true); }
+        else if(seq === 'OO') { setResult({ o: '🌬️', t: '산소 분자 (O₂)', d: '산소 원자 2개 결합! 우리가 숨 쉬는 산소' }); setCompleted(true); }
+        else if(seq === 'OOO') { setResult({ o: '🛡️', t: '오존 (O₃)', d: '산소 원자 3개 결합! 자외선을 막아주는 오존층' }); setCompleted(true); }
+        else setResult({ o: '🤔', t: '불안정함', d: '이 조합은 불안정합니다. (힌트: 빈칸을 두거나, H-O-H, O-C-O, H-H, O-O, O-O-O 등을 만들어보세요)' });
+    };
+
+    return (
+        <div className="flex-1 flex flex-col w-full h-full p-4 scrollable-panel items-center justify-center">
+            <h2 className="text-2xl font-bold text-coral-400 mb-2">🍡 분자 꼬치 만들기</h2>
+            <p className="text-gray-400 text-sm mb-6 text-center">원자를 골라 빈 자리를 클릭해 분자(H₂, O₂, H₂O, CO₂, O₃)를 조립하세요.<br/>(1~2칸은 비워둬도 됩니다!)</p>
+            
+            <div className="flex gap-4 mb-8">
+                {Object.keys(atoms).map(a => (
+                    <button key={a} onClick={() => setSelectedA(a)} className={`w-14 h-14 rounded-full ${atoms[a].c} border-4 transition-transform ${selectedA === a ? 'border-white scale-110 shadow-[0_0_15px_rgba(255,255,255,0.5)]' : 'border-transparent'}`}>
+                        <div className="text-white font-black text-xl">{a}</div><div className="text-[10px] text-white/80 -mt-1">{atoms[a].n}</div>
+                    </button>
+                ))}
+            </div>
+
+            <div className="relative w-full max-w-sm h-16 bg-gradient-to-r from-amber-800 via-amber-600 to-amber-800 rounded-full flex items-center justify-center gap-4 px-8 shadow-2xl mb-8">
+                {slots.map((s, i) => (
+                    <div key={i} onClick={() => handleSlotClick(i)} className={`w-12 h-12 rounded-full border-2 border-dashed flex items-center justify-center cursor-pointer transition-all ${s ? 'border-transparent' : 'border-amber-300/50 hover:bg-white/20'}`}>
+                        {s && <div className={`w-12 h-12 rounded-full ${atoms[s].c} flex items-center justify-center text-white font-black text-xl animate-pop shadow-lg`}>{s}</div>}
+                    </div>
+                ))}
+            </div>
+
+            <div className="flex gap-2 mb-6">
+                <button onClick={checkMolecule} className="px-6 py-3 bg-brand font-bold rounded-xl active:scale-95">🔬 어떤 분자일까?</button>
+                <button onClick={() => { setSlots([null,null,null]); setResult(null); }} className="px-6 py-3 bg-white/10 font-bold rounded-xl active:scale-95">🗑️ 비우기</button>
+            </div>
+
+            {result && (
+                <div className="glass-panel p-4 rounded-2xl flex items-center gap-4 animate-fade-in border border-brand/50">
+                    <div className="text-4xl">{result.o}</div>
+                    <div className="text-left"><div className="font-bold text-lg text-brand">{result.t}</div><div className="text-sm text-gray-300">{result.d}</div></div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const FactoryMode = ({ setCompleted }) => {
+    const cvL = useRef(null), cvR = useRef(null); const engL = useRef(null), engR = useRef(null);
+    const [wallet, setWallet] = useState(0);
+    const [catElem, setCatElem] = useState('Mg'); const [anElem, setAnElem] = useState('Cl');
+    const [catStatus, setCatStatus] = useState('pending'); const [anStatus, setAnStatus] = useState('pending');
+
+    useEffect(() => {
+        if(cvL.current) {
+            engL.current = new WalletAtomEngine(cvL.current, catElem, 'extract', (act, done) => {
+                if(act === 'extracted') setWallet(w => w + 1);
+                if(done) { setCatStatus('complete'); setCompleted(true); }
+            });
+            engL.current.resize(cvL.current.getBoundingClientRect()); engL.current.start();
+        }
+        if(cvR.current) {
+            engR.current = new WalletAtomEngine(cvR.current, anElem, 'inject', (act, payload) => {
+                if(act === 'request_inject') { setWallet(w => { if(w > 0) { setTimeout(() => payload(true), 0); return w - 1; } else { setTimeout(() => payload(false), 0); return w; } }); }
+                if(act === 'completed') { setAnStatus('complete'); setCompleted(true); }
+            });
+            engR.current.resize(cvR.current.getBoundingClientRect()); engR.current.start();
+        }
+        const obs = new ResizeObserver(entries => { entries.forEach(e => { if(e.target === cvL.current) engL.current.resize(e.contentRect); else if(e.target === cvR.current) engR.current.resize(e.contentRect); }); });
+        if(cvL.current) obs.observe(cvL.current); if(cvR.current) obs.observe(cvR.current);
+        return () => { obs.disconnect(); if(engL.current) engL.current.stop(); if(engR.current) engR.current.stop(); };
+    }, []);
+
+    const resetCat = (elem) => { setCatElem(elem); setCatStatus('pending'); if(engL.current) engL.current.reset(elem); };
+    const resetAn = (elem) => { setAnElem(elem); setAnStatus('pending'); if(engR.current) engR.current.reset(elem); };
+
+    return (
+        <div className="flex flex-col w-full h-full relative">
+            <div className="flex-1 flex flex-col md:flex-row p-2 gap-2">
+                <div className="flex-1 glass-panel rounded-xl flex flex-col relative overflow-hidden min-h-[240px]">
+                    <div className="p-2 text-center text-sm font-bold text-cation bg-black/30 flex justify-between items-center">
+                        <span>⚡ 양이온 공장</span>
+                        <div className="flex gap-1">
+                            <button onClick={()=>resetCat('Na')} className={`px-2 py-0.5 rounded text-xs transition-colors ${catElem==='Na'?'bg-blue-500 text-white':'bg-white/10 hover:bg-white/20'}`}>Na</button>
+                            <button onClick={()=>resetCat('Mg')} className={`px-2 py-0.5 rounded text-xs transition-colors ${catElem==='Mg'?'bg-green-500 text-white':'bg-white/10 hover:bg-white/20'}`}>Mg</button>
+                        </div>
+                    </div>
+                    <div className="text-center text-xs text-gray-400 mt-1 absolute w-full z-10 pointer-events-none">바깥쪽 전자를 클릭해 빼내세요</div>
+                    <canvas ref={cvL} className="flex-1 sim-canvas w-full"></canvas>
+                    {catStatus === 'complete' && <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center pointer-events-none animate-fade-in z-20">
+                        <span className="text-cation font-black text-xl bg-black/60 px-4 py-2 rounded-lg border border-cation mb-4">{catElem === 'Na' ? 'Na⁺' : 'Mg²⁺'} 완성!</span>
+                        <button className="pointer-events-auto px-4 py-2 bg-cation hover:bg-red-600 text-white font-bold rounded-full text-sm shadow-lg active:scale-95 transition-transform" onClick={() => resetCat(catElem)}>🔄 새 {catElem} 원자 부르기</button>
+                    </div>}
+                </div>
+                <div className="flex-1 glass-panel rounded-xl flex flex-col relative overflow-hidden min-h-[240px]">
+                    <div className="p-2 text-center text-sm font-bold text-anion bg-black/30 flex justify-between items-center">
+                        <span>⚡ 음이온 공장</span>
+                        <div className="flex gap-1">
+                            <button onClick={()=>resetAn('Cl')} className={`px-2 py-0.5 rounded text-xs transition-colors ${anElem==='Cl'?'bg-orange-500 text-white':'bg-white/10 hover:bg-white/20'}`}>Cl</button>
+                            <button onClick={()=>resetAn('O')} className={`px-2 py-0.5 rounded text-xs transition-colors ${anElem==='O'?'bg-red-500 text-white':'bg-white/10 hover:bg-white/20'}`}>O</button>
+                        </div>
+                    </div>
+                    <div className="text-center text-xs text-gray-400 mt-1 absolute w-full z-10 pointer-events-none">빈 궤도를 클릭해 지갑의 전자를 넣으세요</div>
+                    <canvas ref={cvR} className="flex-1 sim-canvas w-full"></canvas>
+                    {anStatus === 'complete' && <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center pointer-events-none animate-fade-in z-20">
+                        <span className="text-anion font-black text-xl bg-black/60 px-4 py-2 rounded-lg border border-anion mb-4">{anElem === 'Cl' ? 'Cl⁻' : 'O²⁻'} 완성!</span>
+                        <button className="pointer-events-auto px-4 py-2 bg-anion hover:bg-blue-600 text-white font-bold rounded-full text-sm shadow-lg active:scale-95 transition-transform" onClick={() => resetAn(anElem)}>🔄 새 {anElem} 원자 부르기</button>
+                    </div>}
+                </div>
+            </div>
+            <div className="p-4 bg-panelbg border-t border-white/10 shrink-0 flex justify-between items-center gap-4">
+                <div className="font-bold text-brand shrink-0">💰 전자 지갑</div>
+                <div className="flex-1 flex flex-wrap gap-2 min-h-[40px] items-center bg-black/50 px-4 py-2 rounded-2xl border border-white/10">
+                    {wallet === 0 && <span className="text-xs text-gray-500">양이온 공장에서 전자를 빼오세요!</span>}
+                    {Array.from({length: wallet}).map((_, i) => (<div key={i} className="w-8 h-8 rounded-full bg-electron flex items-center justify-center text-black font-black text-xs animate-pop shadow-[0_0_10px_#facc15] shrink-0">e⁻</div>))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const RacingMode = ({ setCompleted }) => {
+    const canvasRef = useRef(null); const engineRef = useRef(null); const [powerOn, setPowerOn] = useState(false); const [polarity, setPolarity] = useState(1);
+    useEffect(() => {
+        const cv = canvasRef.current; if (!cv) return;
+        const engine = new MigrationEngine(cv); engineRef.current = engine;
+        engine.resize(cv.getBoundingClientRect()); engine.start();
+        const obs = new ResizeObserver(entries => { for (let e of entries) engine.resize(e.contentRect); }); obs.observe(cv);
+        return () => { obs.disconnect(); engine.stop(); };
+    }, []);
+    useEffect(() => { if(engineRef.current) { engineRef.current.setPower(powerOn); if(powerOn) setCompleted(true); } }, [powerOn, setCompleted]);
+    return (
+        <div className="flex-1 flex flex-col w-full h-full relative">
+            <div className="absolute top-4 left-4 right-4 z-10 flex justify-between items-start pointer-events-none">
+                <div className="pointer-events-auto glass-panel p-3 rounded-xl flex flex-col gap-3 shadow-lg">
+                    <div className="flex items-center justify-between gap-4"><span className="text-sm font-bold text-gray-200">전원 장치</span><button onClick={() => setPowerOn(!powerOn)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${powerOn ? 'bg-green-500' : 'bg-gray-600'}`}><span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${powerOn ? 'translate-x-6' : 'translate-x-1'}`}/></button></div>
+                    <button onClick={() => { if(engineRef.current){ engineRef.current.togglePolarity(); setPolarity(p=>p*-1); } }} className="w-full py-2 bg-white/10 hover:bg-white/20 rounded text-xs font-bold transition-colors active:scale-95">🔄 (+)(-) 전극 바꾸기</button>
+                </div>
+            </div>
+            <div className="flex-1 relative min-h-[280px]"><canvas ref={canvasRef} className="sim-canvas bg-darkbg"></canvas></div>
+            <div className="absolute bottom-4 left-4 right-4 pointer-events-none flex justify-center"><div className="pointer-events-auto glass-panel p-3 rounded-xl text-center text-sm shadow-lg max-w-sm w-full text-gray-300">전압을 걸어 이온의 이동 방향을 관찰하세요.</div></div>
+        </div>
+    );
+};
+
+const ProfileModeFinal = ({ setCompleted }) => {
+    const [mIdx, setMIdx] = useState(0);
+    const mission = PROFILE_MISSIONS[mIdx];
+    const opts = [' ', '+', '-', '2+', '2-', '3+', '3-'];
+    const [step, setStep] = useState(1); const [rIdx, setRIdx] = useState(0); const [err, setErr] = useState(false);
+    const [items, setItems] = useState([]); const [drag, setDrag] = useState({ id: null, x: 0, y: 0 }); 
+    const [toast, setToast] = useState(''); const [shake, setShake] = useState(false);
+
+    useEffect(() => { 
+        setItems(mission.blocks.map((t, i) => ({ id: `b-${mission.id}-${i}`, text: t, zone: 'pool' }))); 
+        setStep(1); setRIdx(0); 
+    }, [mIdx, mission]);
+    
+    const checkFormula = () => { if (opts[rIdx] === mission.correctFormula) setStep(2); else { setErr(true); setTimeout(() => setErr(false), 500); } };
+    
+    // 순수 터치 이벤트 기반의 안전한 Drag & Drop
+    useEffect(() => {
+        const handleMove = (e) => {
+            if(!drag.id) return;
+            const isTouch = e.type.startsWith('touch');
+            const cX = isTouch ? e.touches[0].clientX : e.clientX; 
+            const cY = isTouch ? e.touches[0].clientY : e.clientY;
+            setDrag(p => ({ ...p, x: cX, y: cY }));
+        };
+        const handleUp = (e) => {
+            if(!drag.id) return;
+            const isTouch = e.type.startsWith('touch');
+            const cX = isTouch ? e.changedTouches[0].clientX : e.clientX; 
+            const cY = isTouch ? e.changedTouches[0].clientY : e.clientY;
+            
+            const ghost = document.getElementById('drag-ghost'); if(ghost) ghost.style.display = 'none';
+            const target = document.elementFromPoint(cX, cY); if(ghost) ghost.style.display = 'block';
+            
+            let zone = target?.closest('[data-zone]')?.getAttribute('data-zone') || 'pool';
+            const dItem = items.find(i => i.id === drag.id);
+            
+            if (zone === 'assembly') {
+                const proposed = [...items.filter(i => i.zone === 'assembly' && i.id !== dItem.id).map(i => i.text), dItem.text];
+                if (proposed.includes('소') && proposed.includes('화 이온')) { setToast("'소'와 '화 이온'은 동시 불가!"); setShake(true); setTimeout(()=>setShake(false),300); setTimeout(()=>setToast(''),2000); zone = 'pool'; }
+            }
+            setItems(p => p.map(i => i.id === dItem.id ? { ...i, zone } : i)); 
+            setDrag({ id: null, x: 0, y: 0 });
+        };
+
+        if(drag.id) {
+            window.addEventListener('mousemove', handleMove, {passive: false}); window.addEventListener('touchmove', handleMove, {passive: false});
+            window.addEventListener('mouseup', handleUp); window.addEventListener('touchend', handleUp);
+        }
+        return () => {
+            window.removeEventListener('mousemove', handleMove); window.removeEventListener('touchmove', handleMove);
+            window.removeEventListener('mouseup', handleUp); window.removeEventListener('touchend', handleUp);
+        };
+    }, [drag.id, items]);
+
+    const handleDown = (e, item) => {
+        const isTouch = e.type.startsWith('touch');
+        const cX = isTouch ? e.touches[0].clientX : e.clientX; 
+        const cY = isTouch ? e.touches[0].clientY : e.clientY;
+        setDrag({ id: item.id, x: cX, y: cY });
+    };
+
+    const checkAssembly = () => {
+        const assem = items.filter(i => i.zone === 'assembly').map(i => i.text); const trash = items.filter(i => i.zone === 'trash').map(i => i.text);
+        const isAssemOk = mission.targetAssembly.every(t => assem.includes(t)) && assem.length === mission.targetAssembly.length;
+        const isTrashOk = mission.targetTrash.every(t => trash.includes(t)) && trash.length === mission.targetTrash.length;
+        
+        if (isAssemOk && isTrashOk) { 
+            setStep(3); 
+            if(mIdx === PROFILE_MISSIONS.length - 1) setCompleted(true); 
+        } else { setToast("오류! 조립이 틀렸거나 휴지통을 확인하세요."); setShake(true); setTimeout(()=>setShake(false),300); setTimeout(()=>setToast(''),2000); }
+    };
+    
+    const renderBlock = (i) => (
+        <div key={i.id} onMouseDown={step===2?(e)=>handleDown(e,i):undefined} onTouchStart={step===2?(e)=>handleDown(e,i):undefined} className={`px-4 py-2 bg-white text-darkbg font-extrabold rounded-lg border-b-4 border-gray-300 select-none ${step===2?'cursor-grab touch-none':''} ${drag.id === i.id ? 'opacity-0' : ''}`}>{i.text}</div>
+    );
+
+    return (
+        <div className="flex-1 flex flex-col p-4 scrollable-panel">
+            <div className="text-center mb-4"><span className="text-brand font-bold text-xs bg-brand/20 px-3 py-1 rounded-full">미션 {mIdx + 1} / {PROFILE_MISSIONS.length}</span><h2 className="text-lg font-bold mt-2">{mission.desc}</h2></div>
+            
+            <div className={`glass-panel rounded-2xl p-6 mb-4 ${step !== 1 ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div className="flex items-center justify-center gap-2 mb-4"><span className="text-6xl font-black">{mission.atom}</span>
+                    {step===1 ? (<div className={`flex flex-col items-center bg-black/30 rounded-xl px-2 py-1 ${err?'animate-shake border border-red-500':''}`}><button onClick={()=>setRIdx(p=>(p-1+opts.length)%opts.length)} className="p-1 text-gray-400 hover:text-white">▲</button><div className="text-3xl font-bold text-brand h-10 w-12 flex items-center justify-center">{opts[rIdx]}</div><button onClick={()=>setRIdx(p=>(p+1)%opts.length)} className="p-1 text-gray-400 hover:text-white">▼</button></div>) : (<span className="text-3xl font-bold text-brand mb-8">{mission.correctFormula}</span>)}
+                </div>
+                {step===1 && <button onClick={checkFormula} className="w-full py-3 bg-brand font-bold rounded-xl active:scale-95">이온식 확정</button>}
+            </div>
+            {step>=2 && (
+                <div className="glass-panel rounded-2xl p-4 flex-1 flex flex-col relative">
+                    {toast && <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-red-500 text-white text-xs px-4 py-2 rounded-full z-50 animate-fade-in whitespace-nowrap shadow-lg">{toast}</div>}
+                    <div className="flex gap-2 min-h-[120px]">
+                        <div data-zone="assembly" className={`flex-1 border-2 border-dashed rounded-xl p-3 flex flex-wrap gap-2 content-start ${shake?'border-red-500 bg-red-500/10':'border-brand/50'}`}>{items.filter(i=>i.zone==='assembly').map(renderBlock)}</div>
+                        <div data-zone="trash" className="w-24 border-2 border-dashed border-red-500/30 rounded-xl flex flex-col items-center pt-4 gap-2 text-red-400 bg-red-500/5"><span>🗑️</span>{items.filter(i=>i.zone==='trash').map(renderBlock)}</div>
+                    </div>
+                    <div data-zone="pool" className="mt-4 min-h-[80px] bg-black/20 rounded-xl p-3 flex flex-wrap gap-2 justify-center">{items.filter(i=>i.zone==='pool').map(renderBlock)}</div>
+                    {step===2 && <button onClick={checkAssembly} className="mt-4 w-full py-3 bg-brand font-bold rounded-xl active:scale-95 shadow-lg">이름 완성하기</button>}
+                </div>
+            )}
+            {step===3 && (
+                <div className="mt-4 p-4 rounded-xl text-center border border-green-500 bg-green-500/10 animate-fade-in flex flex-col gap-3">
+                    <h3 className="text-xl font-bold text-green-400">🎉 완벽합니다! {mission.atom}{mission.correctFormula} : {mission.targetAssembly.join('')}</h3>
+                    {mIdx < PROFILE_MISSIONS.length - 1 ? (
+                        <button onClick={() => setMIdx(p=>p+1)} className="w-full py-3 bg-white text-black font-bold rounded-xl active:scale-95">다음 미션 진행 ➔</button>
+                    ) : (<span className="font-bold text-yellow-400">모든 프로필 미션을 완료했습니다!</span>)}
+                </div>
+            )}
+            {drag.id && <div id="drag-ghost" className="fixed px-4 py-2 bg-white text-darkbg font-extrabold rounded-lg shadow-2xl z-[9999] pointer-events-none" style={{left:drag.x-30,top:drag.y-20}}>{items.find(i=>i.id===drag.id)?.text}</div>}
+        </div>
+    );
+};
+
+const NaClMode = ({ setCompleted }) => {
+    const [water, setWater] = useState([1,2,3,4,5]); const [collected, setCollected] = useState(0);
+    const [clicks, setClicks] = useState(0); const [shake, setShake] = useState(false); const [msg, setMsg] = useState('');
+
+    const collectWater = (id) => { setWater(w => w.filter(x => x !== id)); setCollected(c => c+1); if(collected === 4) setMsg('💧 물 분자는 독립된 단위라 쉽게 담겨요! 이제 소금을 클릭해보세요.'); };
+    const clickSalt = () => { 
+        setClicks(c => c+1); setShake(true); setTimeout(()=>setShake(false), 400); 
+        if(clicks===0) setMsg('🤔 한 덩어리만 뗄 수 없어요. Na⁺와 Cl⁻가 빈틈없이 연결되어 있습니다!');
+        else if(clicks===1) setMsg('❌ 분자처럼 딱 떨어지는 단위가 없어요! 소금은 이온 결합 물질입니다.');
+        else { setMsg('✅ 정답입니다! 소금은 분자가 아니라 수많은 이온이 연속적으로 결합한 물질입니다.'); setCompleted(true); }
+    };
+
+    return (
+        <div className="flex-1 flex flex-col p-4 scrollable-panel gap-4">
+            <div className="text-center bg-black/30 p-2 rounded-lg text-sm text-gray-300">미션: 물 분자와 소금을 한 덩어리씩 클릭해서 담아보세요!</div>
+            <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex-1 glass-panel p-4 rounded-xl text-center min-h-[150px]">
+                    <div className="text-brand font-bold mb-4">💧 물 분자</div>
+                    <div className="flex flex-wrap gap-2 justify-center">{water.map(id => (<div key={id} onClick={()=>collectWater(id)} className="px-3 py-1 bg-sky-500/20 border border-sky-500 rounded-full cursor-pointer hover:bg-sky-500/40 animate-pop">H-O-H</div>))}</div>
+                </div>
+                <div className="flex-1 glass-panel p-4 rounded-xl text-center min-h-[150px] relative overflow-hidden">
+                    <div className="text-orange-400 font-bold mb-4">🧂 소금 (NaCl)</div>
+                    <div onClick={clickSalt} className={`relative grid grid-cols-6 gap-[2px] w-fit mx-auto cursor-pointer ${shake?'animate-shake':''}`}>
+                        {Array.from({length: 24}).map((_, i) => (<div key={i} className={`w-6 h-6 flex items-center justify-center text-[10px] font-bold text-white rounded-sm ${i%2===0?'bg-indigo-500':'bg-rose-500'} ${clicks>=3?'opacity-30 transition-opacity duration-500':''}`}>{i%2===0?'Na⁺':'Cl⁻'}</div>))}
+                        {clicks >= 3 && <div className="absolute inset-0 flex items-center justify-center pointer-events-none animate-pop z-10"><div className="text-red-500 font-black text-xl md:text-2xl bg-black/90 px-4 py-2 border-4 border-red-500 rounded-xl transform -rotate-12 whitespace-nowrap shadow-2xl">독립된 분자가 아님!</div></div>}
+                    </div>
+                </div>
+            </div>
+            <div className="glass-panel p-4 rounded-xl min-h-[80px] border-2 border-dashed border-white/20">
+                <div className="text-xs text-gray-400 mb-2">📦 수집 상자</div>
+                <div className="flex gap-2">{Array.from({length: collected}).map((_, i) => (<div key={i} className="px-2 py-1 bg-sky-500/50 rounded-full text-xs">H-O-H</div>))}</div>
+            </div>
+            {msg && <div className="p-3 bg-white/10 rounded-lg text-center text-sm animate-fade-in border border-white/20">{msg}</div>}
+        </div>
+    );
+};
+
+// --- 메인 앱 (두 개의 문 라우팅 시스템) ---
+const MainApp = () => {
+    const [view, setView] = useState('intro'); // 'intro', 'simulation', 'report', 'done'
+    const [sessionType, setSessionType] = useState('all'); // 's1'(원자/분자), 's2'(이온), 'all'(총정리)
+    const [simMode, setSimMode] = useState('observe'); 
+    
+    const [adminOpen, setAdminOpen] = useState(false);
+    const [pwdModal, setPwdModal] = useState({ isOpen: false, targetSession: '' });
+    const [alertConfig, setAlertConfig] = useState({ isOpen: false, title: '', msg: '' });
+    
+    // 미션 완료 상태
+    const [skewerCompleted, setSkewerCompleted] = useState(false);
+    const [factoryCompleted, setFactoryCompleted] = useState(false);
+    const [racingObserved, setRacingObserved] = useState(false);
+    const [profileCompleted, setProfileCompleted] = useState(false);
+    const [naclCompleted, setNaclCompleted] = useState(false);
+
+    // 히스토리 관리
+    useEffect(() => {
+        window.history.replaceState({ view: 'intro' }, '');
+        const onPop = (e) => { const v = e.state?.view; const allowed = ['intro', 'simulation', 'report', 'done']; setView(allowed.includes(v) ? v : 'intro'); };
+        window.addEventListener('popstate', onPop); return () => window.removeEventListener('popstate', onPop);
+    }, []);
+
+    const navigate = (v) => { setView(v); window.history.pushState({ view: v }, ''); };
+    const showAlert = (title, msg) => setAlertConfig({ isOpen: true, title, msg });
+
+    // 두 개의 문 입장 로직
+    const handleEntry = (type) => {
+        if (type === 's1') {
+            setSessionType('s1'); setSimMode('observe'); navigate('simulation');
+        } else if (type === 's2') {
+            setPwdModal({ isOpen: true, targetSession: 's2' });
+        } else if (type === 'all') {
+            setPwdModal({ isOpen: true, targetSession: 'all' });
+        }
+    };
+
+    const handlePwdSuccess = () => {
+        const type = pwdModal.targetSession;
+        setPwdModal({ isOpen: false, targetSession: '' });
+        setSessionType(type);
+        setSimMode(type === 's2' ? 'factory' : 'observe');
+        navigate('simulation');
+    };
+
+    // 탭 구성 필터링
+    const ALL_TABS = [
+        { id: 'observe', name: '🔭 관찰', s: ['s1', 'all'] }, 
+        { id: 'skewer', name: '🍡 분자 꼬치', s: ['s1', 'all'] }, 
+        { id: 'factory', name: '🏭 지갑 공장', s: ['s2', 'all'] },
+        { id: 'racing', name: '🏁 이온 레이싱', s: ['s2', 'all'] }, 
+        { id: 'profile', name: '🧩 이온 프로필', s: ['s2', 'all'] }, 
+        { id: 'nacl', name: '🔍 소금의 비밀', s: ['s2', 'all'] }
+    ];
+    const visibleTabs = ALL_TABS.filter(t => t.s.includes(sessionType));
+
+    return (
+        <div className="w-full h-screen-safe bg-darkbg text-white overflow-hidden relative font-sans flex flex-col">
+            <div className="absolute top-0 left-0 w-full z-50 px-4 flex justify-end" style={{ paddingTop: 'max(16px, var(--safe-top))' }}>
+                <button onClick={() => setAdminOpen(true)} className="px-3 py-1.5 bg-black/40 backdrop-blur border border-white/10 rounded-full text-xs text-gray-300 active:scale-95 shadow-lg">⚙️ 가이드</button>
+            </div>
+            
+            {view === 'intro' && (
+                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center h-full scrollable-panel">
+                    <div className="text-6xl mb-4 animate-float">🌌</div>
+                    <h1 className="text-3xl md:text-4xl font-black mb-4"><span className="text-brand block mb-1">입자 유니버스</span>원자부터 이온까지</h1>
+                    <p className="text-gray-400 mb-10 max-w-sm text-sm leading-relaxed">오늘 학습할 단원의 문을 선택하세요.</p>
+                    
+                    <div className="flex flex-col gap-4 w-full max-w-xs">
+                        <button onClick={() => handleEntry('s1')} className="w-full px-6 py-4 bg-white/10 hover:bg-brand/20 border border-brand/50 text-left font-bold rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-between group">
+                            <span><span className="text-xl mr-2">1️⃣</span> 원자와 분자 탐험</span>
+                            <span className="opacity-0 group-hover:opacity-100 transition-opacity">➔</span>
+                        </button>
+                        <button onClick={() => handleEntry('s2')} className="w-full px-6 py-4 bg-white/10 hover:bg-orange-500/20 border border-orange-500/50 text-left font-bold rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-between group relative overflow-hidden">
+                            <span><span className="text-xl mr-2">2️⃣</span> 이온 대모험 🔒</span>
+                            <span className="opacity-50 text-xs text-orange-300">암호 필요</span>
+                        </button>
+                        <button onClick={() => handleEntry('all')} className="w-full px-6 py-3 mt-4 bg-brand text-center font-bold rounded-xl shadow-[0_0_20px_rgba(99,102,241,0.3)] active:scale-95 transition-transform flex items-center justify-center gap-2">
+                            👑 단원 총정리 마스터 🔒
+                        </button>
+                    </div>
+                </div>
+            )}
+            
+            {view === 'simulation' && (
+                <div className="flex flex-col h-full w-full animate-fade-in">
+                    <div className="pt-safe-top bg-panelbg border-b border-white/10 shrink-0 relative z-40" style={{ paddingTop: 'max(16px, var(--safe-top))' }}>
+                        <div className="flex p-2 gap-2 mt-8 md:mt-0 max-w-3xl mx-auto overflow-x-auto no-scrollbar">
+                            {visibleTabs.map(t => (
+                                <button key={t.id} onClick={() => setSimMode(t.id)} className={`flex-shrink-0 px-4 py-2 rounded-lg text-sm font-bold transition-colors whitespace-nowrap ${simMode === t.id ? 'bg-brand text-white' : 'bg-black/20 text-gray-400'}`}>{t.name}</button>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="flex-1 relative flex flex-col overflow-hidden bg-darkbg">
+                        {simMode === 'observe' && <ObserveMode />}
+                        {simMode === 'skewer' && <SkewerMode setCompleted={setSkewerCompleted} />}
+                        {simMode === 'factory' && <FactoryMode setCompleted={setFactoryCompleted} />}
+                        {simMode === 'racing' && <RacingMode setCompleted={setRacingObserved} />}
+                        {simMode === 'profile' && <ProfileModeFinal setCompleted={setProfileCompleted} />}
+                        {simMode === 'nacl' && <NaClMode setCompleted={setNaclCompleted} />}
+                    </div>
+                    <div className="p-3 bg-panelbg/80 backdrop-blur border-t border-white/10 shrink-0 flex justify-center" style={{ paddingBottom: 'max(16px, var(--safe-bottom))' }}>
+                        <button onClick={() => navigate('report')} className="w-full max-w-md py-3 bg-green-500 text-white font-bold rounded-xl active:scale-95 shadow-lg">📝 학습 보고서 작성하기</button>
+                    </div>
+                </div>
+            )}
+            
+            {view === 'report' && (
+                <ReportView 
+                    sessionType={sessionType}
+                    checklist={{skewerCompleted, factoryCompleted, racingObserved, profileCompleted, naclCompleted}}
+                    onSubmitSuccess={() => navigate('done')} 
+                    showAlert={showAlert}
+                />
+            )}
+            
+            {view === 'done' && (
+                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center h-full scrollable-panel">
+                    <div className="w-24 h-24 bg-green-500/20 text-green-400 rounded-full flex items-center justify-center text-5xl mb-6 shadow-lg animate-pop">✓</div>
+                    <h2 className="text-3xl font-black mb-2 text-white">제출 완료!</h2>
+                    <p className="text-gray-400 mb-8">보고서가 성공적으로 저장되었습니다.</p>
+                    <button onClick={() => navigate('intro')} className="px-6 py-3 bg-white/10 hover:bg-white/20 font-bold rounded-xl active:scale-95 transition-transform flex items-center gap-2">🔄 처음으로 돌아가기</button>
+                </div>
+            )}
+            
+            <PasswordModal isOpen={pwdModal.isOpen} onClose={() => setPwdModal({ isOpen: false, targetSession: '' })} onSuccess={handlePwdSuccess} targetName={pwdModal.targetSession === 's2' ? '이온 대모험' : '총정리 마스터'} />
+            <AdminGuideModal isOpen={adminOpen} onClose={() => setAdminOpen(false)} />
+            <Modal isOpen={alertConfig.isOpen} onClose={() => setAlertConfig({ ...alertConfig, isOpen: false })} title={alertConfig.title}>{alertConfig.msg}</Modal>
+        </div>
+    );
+};
+
+// 동적 보고서 뷰 (세션에 따라 퀴즈/체크리스트 필터링)
+const ReportView = ({ sessionType, checklist, onSubmitSuccess, showAlert }) => {
+    const [data, setData] = useState({ id: '', name: '', insight: '' });
+    const [quiz, setQuiz] = useState([]); const [ans, setAns] = useState({});
+    const [submitting, setSubmitting] = useState(false);
+
+    useEffect(() => { 
+        // 10문제 중 세션에 맞게 랜덤 추출 (총정리는 4문제, 나머지는 2문제)
+        setQuiz(shuffle(QUIZ_POOL).slice(0, sessionType === 'all' ? 4 : 2)); 
+    }, [sessionType]);
+
+    const submit = async () => {
+        if (!data.id || !data.name || !data.insight) return showAlert('입력 오류', '빈 칸을 모두 채워주세요.');
+        if (Object.keys(ans).length < quiz.length) return showAlert('퀴즈 확인', 'OX 퀴즈를 모두 풀어주세요.');
+        if (!GOOGLE_SCRIPT_URL) return showAlert('설정 안내', '[⚙️ 가이드]를 참고하여 상단 코드의 GOOGLE_SCRIPT_URL을 설정해주세요.');
+
+        setSubmitting(true);
+        let score = 0; quiz.forEach((q, i) => { if (ans[i] === q.a) score += 100/quiz.length; });
+        
+        const payload = { 
+            timestamp: new Date().toLocaleString('ko-KR'), studentId: data.id, studentName: data.name, sessionName: sessionType === 's1' ? '1차시(원자/분자)' : sessionType === 's2' ? '2차시(이온)' : '총정리',
+            skewerCompleted: checklist.skewerCompleted?'O':'X', factoryComplete: checklist.factoryCompleted?'O':'X', racingObserved: checklist.racingObserved?'O':'X', profileComplete: checklist.profileCompleted?'O':'X', naclCompleted: checklist.naclCompleted?'O':'X', 
+            quizScore: Math.round(score), insight: data.insight 
+        };
+
+        try { 
+            await Promise.race([
+                fetch(GOOGLE_SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) }), 
+                new Promise((_, r) => setTimeout(()=>r(new Error()), 8000))
+            ]); 
+            onSubmitSuccess(); 
+        } 
+        catch (e) { showAlert('제출 실패', '네트워크 오류가 발생했습니다.'); } 
+        finally { setSubmitting(false); }
+    };
+
+    return (
+        <div className="flex-1 scrollable-panel p-4 pb-24" style={{ paddingTop: 'max(16px, var(--safe-top))' }}>
+            <div className="max-w-2xl mx-auto space-y-4">
+                <h2 className="text-2xl font-bold text-center text-brand mb-4">학습 보고서</h2>
+                
+                <div className="glass-panel p-4 rounded-xl flex gap-4"><input type="text" placeholder="학번 (예: 20101)" onChange={e=>setData({...data, id:e.target.value})} className="flex-1 w-1/2 bg-black/30 p-3 rounded-lg border border-white/10 outline-none focus:border-brand text-sm"/><input type="text" placeholder="이름" onChange={e=>setData({...data, name:e.target.value})} className="flex-1 w-1/2 bg-black/30 p-3 rounded-lg border border-white/10 outline-none focus:border-brand text-sm"/></div>
+                
+                <div className="glass-panel p-4 rounded-xl text-sm text-gray-300">
+                    <p className="font-bold text-brand mb-2 border-b border-white/10 pb-2">실험 체크리스트</p>
+                    {(sessionType === 's1' || sessionType === 'all') && <p>🍡 꼬치: {checklist.skewerCompleted?'✅':'❌'}</p>}
+                    {(sessionType === 's2' || sessionType === 'all') && <p>🏭 지갑: {checklist.factoryCompleted?'✅':'❌'} | 🏁 레이싱: {checklist.racingObserved?'✅':'❌'} <br/> 🧩 프로필: {checklist.profileCompleted?'✅':'❌'} | 🔍 소금: {checklist.naclCompleted?'✅':'❌'}</p>}
+                </div>
+                
+                <div className="glass-panel p-4 rounded-xl space-y-4">
+                    <h3 className="font-bold flex items-center gap-2">🧠 확인 퀴즈 <span className="text-xs font-normal bg-black/30 px-2 py-1 rounded text-gray-400">{quiz.length}문항</span></h3>
+                    {quiz.map((q, i) => (
+                        <div key={i} className="bg-black/20 p-3 rounded-lg border border-white/5"><p className="mb-3 text-sm leading-relaxed"><span className="text-brand font-bold mr-1">Q{i+1}.</span>{q.q}</p><div className="flex gap-2">
+                            <button onClick={()=>setAns(p=>({...p,[i]:true}))} disabled={ans[i]!==undefined} className={`flex-1 py-2 rounded-lg font-bold transition-all ${ans[i]===true?'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]':'bg-white/10 hover:bg-white/20'}`}>O</button>
+                            <button onClick={()=>setAns(p=>({...p,[i]:false}))} disabled={ans[i]!==undefined} className={`flex-1 py-2 rounded-lg font-bold transition-all ${ans[i]===false?'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]':'bg-white/10 hover:bg-white/20'}`}>X</button>
+                        </div>{ans[i]!==undefined && <div className={`mt-3 text-xs p-3 rounded-lg border animate-fade-in ${ans[i]===q.a?'bg-green-500/20 text-green-300 border-green-500/30':'bg-red-500/20 text-red-300 border-red-500/30'}`}><p className="font-bold mb-1 text-sm">{ans[i]===q.a?'정답입니다!':'오답입니다.'}</p>{q.explain}</div>}</div>
+                    ))}
+                </div>
+                
+                <textarea placeholder="오늘 실험을 통해 알게 된 점을 자유롭게 적어보세요." onChange={e=>setData({...data, insight:e.target.value})} className="w-full h-28 bg-black/30 border border-white/10 rounded-xl p-4 text-sm resize-none outline-none focus:border-brand shadow-inner"></textarea>
+            </div>
+            
+            <div className="fixed bottom-0 left-0 w-full p-4 bg-panelbg/90 backdrop-blur border-t border-white/10 z-20"><button onClick={submit} disabled={submitting} className="w-full max-w-2xl mx-auto flex items-center justify-center py-4 bg-brand font-bold rounded-xl active:scale-95 shadow-[0_0_15px_rgba(99,102,241,0.4)] transition-all">{submitting ? <span className="animate-pulse">데이터 전송 중...</span> : '🚀 제출하기'}</button></div>
+        </div>
+    );
+};
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<MainApp />);
+</script>
+</body>
+</html>
